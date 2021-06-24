@@ -1,7 +1,7 @@
+import os
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__))+"/..")
 import argparse
-import os
 from obesity.data_preproocessing import write_obesity_patient_snp_data
 from obesity.snp_encoding_traintest_split import get_balanced_encoded_train_data_and_labels
 from obesity.ten_cross_validation import cross_validation

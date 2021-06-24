@@ -13,9 +13,9 @@ def cross_validation(train_data,train_labels, model_output_root, fold=10, gpu=3)
     os.environ['CUDA_VISIBLE_DEVICES']='%s'%gpu
     
     # model output path
+    if not os.path.exists(model_output_root):
+        os.makedirs(model_output_root)
     model_output=model_output_root
-    if not os.path.exists(model_output):
-        os.mkdir(model_output)
     
     # initialize
     metric_dict_final = {'metric':['accuracy','precision','sensitivity','specificity','f1','mcc']}
@@ -81,9 +81,11 @@ def cross_validation(train_data,train_labels, model_output_root, fold=10, gpu=3)
         
     # save cross validation result
     df = pd.DataFrame.from_dict(metric_dict_final, orient='columns', dtype=None).set_index('metric')
+    df['mean'] = df.mean(axis=1)
     df.to_csv(os.path.join(model_output,'final_metric.csv'))
     
     df = pd.DataFrame.from_dict(metric_dict_best, orient='columns', dtype=None).set_index('metric')
+    df['mean'] = df.mean(axis=1)
     df.to_csv(os.path.join(model_output,'best_metric.csv'))
     
     # show best models average accuracy

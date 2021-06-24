@@ -17,7 +17,33 @@ def metric_array(test_data, test_labels, model):
     specificity = TN / float(TN + FP)
     f1 = f1_score(test_labels, labels_score.round())
     mcc = matthews_corrcoef(test_labels, labels_score.round()) 
-    metric = [accuracy,precision,sensitivity,specificity,f1,mcc]
+    metric = {'accuracy':accuracy,
+           'precision':precision,
+           'sensitivity':sensitivity,
+           'specificity':specificity,
+           'f1':f1,
+           'mcc':mcc}
+    return metric
+
+# evalute metric (accuracy,precision,sensitivity,specificity,f1,mcc)
+def predict_score_metric_array(predict_score, test_labels):
+    accuracy = accuracy_score(test_labels, predict_score.round())
+    confusion = confusion_matrix(test_labels, predict_score.round())
+    TP = confusion[1, 1]
+    TN = confusion[0, 0]
+    FP = confusion[0, 1]
+    FN = confusion[1, 0]
+    precision = TP / float(TP + FP)
+    sensitivity = TP / float(FN + TP)
+    specificity = TN / float(TN + FP)
+    f1 = f1_score(test_labels, predict_score.round())
+    mcc = matthews_corrcoef(test_labels, predict_score.round()) 
+    metric = {'accuracy':accuracy,
+           'precision':precision,
+           'sensitivity':sensitivity,
+           'specificity':specificity,
+           'f1':f1,
+           'mcc':mcc}
     return metric
 
 # plot training progress
@@ -43,7 +69,7 @@ def show_histroy(csvlog_filepath, plot_filepath):
     fig1.savefig(plot_filepath)
     plt.show()
 
-# show train history
+#show train history
 #show_train_history(t_m ,'accuracy','val_accuracy')
 #show_train_history(t_m ,'loss','val_loss')
 def show_train_history(train_history,train,validation):
@@ -54,3 +80,13 @@ def show_train_history(train_history,train,validation):
     plt.xlabel('Epoch')
     plt.legend(['train', 'validation'], loc='upper left')
     plt.show()
+    
+# create result table
+def create_result_table():
+    df = pd.read_csv('best_metric.csv', index_col=0).T
+    # df.loc['Model_mean'] = df.mean(axis=0)
+    # df.columns.name = 'Model'
+    df.index.name = 'Model'
+    df=df.round(2)
+    df.to_csv('result_table.csv')
+ 

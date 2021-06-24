@@ -2,8 +2,10 @@ import pandas as pd
 import numpy as np
 import random
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
 import os
 import json
+from io import StringIO
 
 # generate integer encoding table(dict)
 def integer_encode_table():
@@ -37,6 +39,30 @@ def SNP_encode_table():
                 value = value -1       
             snp_table[key]=value
     return snp_table
+
+# replacer = Replacer(table)
+# SNP_data.replace(SNP_encode_table())
+class Replacer:
+    def __init__(self, table):
+        self._table = table
+        
+    @property
+    def table(self):
+        return self._table
+    
+    def __call__(self, x):
+        if isinstance(x,str):
+            x = self._table[x]
+        else:
+            x = x.apply(self)
+        return x
+
+# read_obesity_and_normal_snp_data
+def read_obesity_and_normal_snp_data(obesity_snp_data_path, normal_snp_data_path):
+    # load data
+    O_data = pd.read_table(obesity_snp_data_path, sep= '\t', low_memory=False)
+    N_data = pd.read_table(normal_snp_data_path, sep= '\t', low_memory=False)
+    return O_data, N_data
 
 # randomly sample data from normal SNP data to make the amount is equal to obesity SNP data
 def random_sample_normal_data_equal_to_obesity(obesity_snp_data_path, normal_snp_data_path):
@@ -81,3 +107,92 @@ def get_balanced_encoded_train_data_and_labels(obesity_snp_data_path, normal_snp
     data_encoded, labels = snp_encoding_and_labeling(O_data, N_data_sampled)
     train_data, test_data, train_labels, test_labels = split(data_encoded, labels, test_size=0.1, random_state = 10, save=False)
     return train_data, train_labels
+
+
+
+# get testing data and labels used in 10 cross validation
+def get_balanced_encoded_test_data_and_labels(obesity_snp_data_path, normal_snp_data_path):
+    O_data, N_data_sampled = random_sample_normal_data_equal_to_obesity(obesity_snp_data_path, normal_snp_data_path)
+    data_encoded, labels = snp_encoding_and_labeling(O_data, N_data_sampled)
+    train_data, test_data, train_labels, test_labels = split(data_encoded, labels, test_size=0.1, random_state = 10, save=False)
+    return test_data, test_labels
+
+
+
+# fast encoding (updated on 20210503)
+def fast_encoding(snp_data_path):
+    with open(snp_data_path,'r') as fp:
+        snp_data_string = fp.read()
+    rows = snp_data_string.split('\n')
+    head = rows[0]
+    body = '\n'.join(rows[1:])
+    for key,value in SNP_encode_table().items():
+        body = body.replace(key,str(value))
+
+    new_data = StringIO(head+"\n"+body)
+    #with open("temp.tsv",'w') as fp:
+    #    fp.write(new_data)
+    df = pd.read_csv(new_data, sep="\t")
+    return df
+
+# input snp data path
+# concatenate obesity and normal SNP data
+# give labels
+# normal : 0 , obesity : 1
+def snp_fast_encoding_and_labeling(normal_snp_data_path, obesity_snp_data_path):
+    # data encoding
+    encoded_N_data = fast_encoding(normal_snp_data_path)
+    encoded_O_data = fast_encoding(obesity_snp_data_path)
+    # concatenate encoded data
+    data_encoded = pd.concat([encoded_N_data, encoded_O_data])
+    # give labels 
+    labels = np.hstack((np.repeat(0, len(encoded_N_data)),np.repeat(1, len(encoded_O_data))))
+    return data_encoded, labels
+
+def snp_fast_encoding_and_labeling_p(normal_snp_data_path, obesity_snp_data_path,
+                                   normal_phenotype_path=None, obesity_phenotype_path=None, balance=False, phenotype=True):
+    # data encoding
+    encoded_N_data = fast_encoding(normal_snp_data_path)
+    encoded_O_data = fast_encoding(obesity_snp_data_path)
+    
+    # random sample
+    if balance:
+        random.seed(10) 
+        encoded_N_data = encoded_N_data.loc[random.sample(list(encoded_N_data.index.values),len(encoded_O_data))]
+    # concatenate encoded data
+    data_encoded = pd.concat([encoded_N_data, encoded_O_data], ignore_index=True)
+    # give labels 
+    labels = np.hstack((np.repeat(0, len(encoded_N_data)),np.repeat(1, len(encoded_O_data))))
+    
+    # scale phenotype data #, 'SEX', 'MESS_CURR'
+    if phenotype:
+        normal_phenotype = pd.read_csv(normal_phenotype_path, index_col=0)
+        obesity_phenotype = pd.read_csv(obesity_phenotype_path, index_col=0)
+        # filter phenotype data
+        normal_phenotype = normal_phenotype.iloc[list(encoded_N_data.index.values)][['DIABETES_SELF', 'AGE']]
+        obesity_phenotype = obesity_phenotype[['DIABETES_SELF', 'AGE']]
+        print('normal:{}\nobesity:{}'.format(len(normal_phenotype), len(obesity_phenotype)))
+        # concat normal and obesity phenotype data
+        data_phenotype = pd.concat([normal_phenotype, obesity_phenotype],ignore_index=True)
+        # normalize min:-1 max:1 
+        Min_Max_Scaler = MinMaxScaler(feature_range=(-1,1)) 
+        scaled_data_phenotype = Min_Max_Scaler.fit_transform(data_phenotype)
+        return data_encoded, labels, scaled_data_phenotype
+    else:
+        return data_encoded, labels
+
+# scale phenotype data
+def get_scaled_phenotype_data(normal_phenotype_path, obesity_phenotype_path):
+    # read phenotype
+    normal_phenotype = pd.read_csv(normal_phenotype_path, index_col=0)
+    obesity_phenotype = pd.read_csv(obesity_phenotype_path, index_col=0)
+    # filter phenotype data
+    normal_phenotype = normal_phenotype[['DIABETES_SELF', 'AGE', 'SEX', 'MESS_CURR']]
+    obesity_phenotype = obesity_phenotype[['DIABETES_SELF', 'AGE', 'SEX', 'MESS_CURR']]
+    print('normal:{}\nobesity:{}'.format(len(normal_phenotype), len(obesity_phenotype)))
+    # concat normal and obesity phenotype data
+    data_phenotype = pd.concat([normal_phenotype, obesity_phenotype], sort=False)
+    # normalize min:-1 max:1 
+    Min_Max_Scaler = MinMaxScaler(feature_range=(-1,1)) 
+    scaled_data_phenotype = Min_Max_Scaler.fit_transform(data_phenotype)
+    return scaled_data_phenotype
